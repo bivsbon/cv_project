@@ -138,18 +138,20 @@ def process(in_path):
     # Lines with roughly equal x and y are grouped together
     vertical_lines = []
     horizontal_lines = []
+
+    # Remove diagonal lines, only keep vertical and horizontal lines
     if linesP is not None:
         for lineP in linesP:
             l = lineP[0]
             x1, y1, x2, y2 = l[0], l[1], l[2], l[3]
-            # print('({}, {}) -> ({}, {})'.format(x1, y1, x2, y2))
-            cv.line(img, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), 7, cv.LINE_AA)
+            cv.line(img, (x1, y1), (x2, y2), (0, 0, 255), 7, cv.LINE_AA)
             line = ((x1, y1), (x2, y2))
             if is_vertical(line):
                 vertical_lines.append(line)
             elif is_horizontal(line):
                 horizontal_lines.append(line)
 
+    # Group together lines that are almost identical to each other
     horizontal_line_clusters = group(horizontal_lines)
     vertical_line_clusters = group(vertical_lines)
 
@@ -157,78 +159,68 @@ def process(in_path):
     horizontal_line_clusters = filter_clusters(horizontal_line_clusters, min_size=4)
     vertical_line_clusters = filter_clusters(vertical_line_clusters, min_size=4)
 
-    # Merge small lines
+    # Merge lines in a cluster into one long line, that should be the edges of the table in the document
     correct = True
-    # for cluster in horizontal_line_clusters:
-    #     print('x', len(cluster))
-    # for cluster in vertical_line_clusters:
-    #     print('y', len(cluster))
-    # h_lines, v_lines = merge_lines(horizontal_line_clusters, vertical_line_clusters)
-    # print(v_lines)
-    # print(h_lines)
-    # for line in v_lines:
-    #     (x1, y1), (x2, y2) = line
-    #     cv.line(img, (x1, y1), (x2, y2), (0, 255, 255), 10, cv.LINE_AA)
-    # for line in h_lines:
-    #     (x1, y1), (x2, y2) = line
-    #     cv.line(img, (x1, y1), (x2, y2), (0, 255, 255), 10, cv.LINE_AA)
-    #
-    # intersections = compute_intersections(v_lines, h_lines)
-    #
-    # # Group corners into 4 quadrants
-    # top_left_quad, bottom_left_quad, top_right_quad, bottom_right_quad = group_into_quadrants(intersections)
-    #
-    # # Find the closest point to the center of each quadrant
-    # top_left_point = min(top_left_quad, key=lambda p: abs(p[0] - M_X) + abs(p[1] - M_Y))
-    # top_right_point = min(top_right_quad, key=lambda p: abs(p[0] - M_X) + abs(p[1] - M_Y))
-    # bottom_left_point = min(bottom_left_quad, key=lambda p: abs(p[0] - M_X) + abs(p[1] - M_Y))
-    # bottom_right_point = min(bottom_right_quad, key=lambda p: abs(p[0] - M_X) + abs(p[1] - M_Y))
-    #
-    # # Automatically evaluate these 4 points , they should somewhat form a rectangle
-    # # filter_dist = 70
-    # # if not near(top_left_point[0], bottom_left_point[0], filter_dist) or \
-    # #         not near(top_left_point[1], top_right_point[1], filter_dist) or \
-    # #         not near(bottom_right_point[0], top_right_point[0], filter_dist) or \
-    # #         not near(bottom_right_point[1], bottom_left_point[1], filter_dist):
-    # #     correct = False
-    #
-    # # Circle these points
+    for cluster in horizontal_line_clusters:
+        print('x', len(cluster))
+    for cluster in vertical_line_clusters:
+        print('y', len(cluster))
+    h_lines, v_lines = merge_lines(horizontal_line_clusters, vertical_line_clusters)
+    print(v_lines)
+    print(h_lines)
+    for line in v_lines:
+        (x1, y1), (x2, y2) = line
+        cv.line(img, (x1, y1), (x2, y2), (0, 255, 255), 10, cv.LINE_AA)
+    for line in h_lines:
+        (x1, y1), (x2, y2) = line
+        cv.line(img, (x1, y1), (x2, y2), (0, 255, 255), 10, cv.LINE_AA)
+
+    intersections = compute_intersections(v_lines, h_lines)
+
+    # Group corners into 4 quadrants accroding to middle point
+    top_left_quad, bottom_left_quad, top_right_quad, bottom_right_quad = group_into_quadrants(intersections)
+
+    # Find the closest point to the center of each quadrant
+    top_left_point = min(top_left_quad, key=lambda p: abs(p[0] - M_X) + abs(p[1] - M_Y))
+    top_right_point = min(top_right_quad, key=lambda p: abs(p[0] - M_X) + abs(p[1] - M_Y))
+    bottom_left_point = min(bottom_left_quad, key=lambda p: abs(p[0] - M_X) + abs(p[1] - M_Y))
+    bottom_right_point = min(bottom_right_quad, key=lambda p: abs(p[0] - M_X) + abs(p[1] - M_Y))
+
+    # (deprecated) Automatically evaluate these 4 points, they should somewhat form a rectangle
+    # filter_dist = 70
+    # if not near(top_left_point[0], bottom_left_point[0], filter_dist) or \
+    #         not near(top_left_point[1], top_right_point[1], filter_dist) or \
+    #         not near(bottom_right_point[0], top_right_point[0], filter_dist) or \
+    #         not near(bottom_right_point[1], bottom_left_point[1], filter_dist):
+    #     correct = False
+
+    # Circle these points
     # img = cv2.circle(img, center=top_left_point, radius=10, color=(0, 0, 255), thickness=-1)
     # img = cv2.circle(img, center=top_right_point, radius=10, color=(0, 0, 255), thickness=-1)
     # img = cv2.circle(img, center=bottom_left_point, radius=10, color=(0, 0, 255), thickness=-1)
     # img = cv2.circle(img, center=bottom_right_point, radius=10, color=(0, 0, 255), thickness=-1)
-    #
-    # pts1 = np.float32([top_left_point, top_right_point, bottom_left_point, bottom_right_point])
-    # pts2 = np.float32([[0, 0], [1070, 0], [0, 1960], [1070, 1960]])
-    # M = cv.getPerspectiveTransform(pts1, pts2)
-    # img = cv.warpPerspective(img, M, (1070, 1960))
-    #
-    # cv.rectangle(img, NAME1_RECT_BASE_1, NAME1_RECT_BASE_2, (0, 0, 255), thickness=6)
-    # cv.rectangle(img, DOB1_RECT_BASE_1, DOB1_RECT_BASE_2, (0, 0, 255), thickness=6)
-    # cv.rectangle(img, NAME2_RECT_BASE_1, NAME2_RECT_BASE_2, (0, 0, 255), thickness=6)
-    # cv.rectangle(img, DOB2_RECT_BASE_1, DOB2_RECT_BASE_2, (0, 0, 255), thickness=6)
+
+    # Warp four corners into rectangle than get 4 bounding box
+    pts1 = np.float32([top_left_point, top_right_point, bottom_left_point, bottom_right_point])
+    pts2 = np.float32([[0, 0], [1070, 0], [0, 1960], [1070, 1960]])
+    M = cv.getPerspectiveTransform(pts1, pts2)
+    img = cv.warpPerspective(img, M, (1070, 1960))
+
+    # Draw bounding boxes, and we're done
+    cv.rectangle(img, NAME1_RECT_BASE_1, NAME1_RECT_BASE_2, (0, 0, 255), thickness=6)
+    cv.rectangle(img, DOB1_RECT_BASE_1, DOB1_RECT_BASE_2, (0, 0, 255), thickness=6)
+    cv.rectangle(img, NAME2_RECT_BASE_1, NAME2_RECT_BASE_2, (0, 0, 255), thickness=6)
+    cv.rectangle(img, DOB2_RECT_BASE_1, DOB2_RECT_BASE_2, (0, 0, 255), thickness=6)
 
     return img, correct
 
 
 def process_and_save(in_img, out_img):
     img, correct = process("img/{}".format(in_img))
-    # plt.figure()
-    # plt.imshow(img)
-    # plt.show()
-
     if correct:
         cv.imwrite('out/correct/{}'.format(out_img), img)
     else:
         cv.imwrite('out/incorrect/{}'.format(out_img), img)
-
-
-def process_and_show(in_path):
-    img, correct = process(in_path)
-
-    plt.figure()
-    plt.imshow(img)
-    plt.show()
 
 
 def process_and_save_all():
@@ -238,24 +230,15 @@ def process_and_save_all():
         futures.append(executor.submit(process_and_save, '{}.jpg'.format(i + 1), '{}.jpg'.format(i + 1)))
     wait(futures)
     print('Done')
+    
+
+def process_and_show(in_path):
+    img, correct = process(in_path)
+
+    plt.figure()
+    plt.imshow(img)
+    plt.show()
 
 
 # process_and_save_all()
 process_and_show("img/179.jpg")
-l = [
-    127,
-    131,
-    133,
-    147,
-    151,
-    153,
-    157,
-    165,
-    169,
-    173,
-    179,
-    181,
-    183,
-    185,
-    189,
-    199]
