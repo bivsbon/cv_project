@@ -127,13 +127,14 @@ def filter_clusters(clusters, min_size=2):
 
 def process(in_path):
     img = cv.imread(in_path, cv2.IMREAD_GRAYSCALE)[:, 0:-100]
-    (thresh, img) = cv2.threshold(img, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    (thresh, img_bw) = cv2.threshold(img, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
 
     # Edge detection
-    dst = cv.Canny(img, 50, 200, None, 5)
+    canny = cv.Canny(img_bw, 50, 200, None, 5)
+    cimg = cv.cvtColor(img, cv.COLOR_GRAY2BGR)
 
     # Line detection
-    linesP = cv.HoughLinesP(dst, 1, np.pi / 180, 150, None, 48, 1)
+    linesP = cv.HoughLinesP(canny, 1, np.pi / 180, 50, None, 48, 1)
 
     # Lines with roughly equal x and y are grouped together
     vertical_lines = []
@@ -144,39 +145,48 @@ def process(in_path):
         for lineP in linesP:
             l = lineP[0]
             x1, y1, x2, y2 = l[0], l[1], l[2], l[3]
-            cv.line(img, (x1, y1), (x2, y2), (0, 0, 255), 7, cv.LINE_AA)
             line = ((x1, y1), (x2, y2))
             if is_vertical(line):
                 vertical_lines.append(line)
+                # cv.line(cimg, (x1, y1), (x2, y2), (255, 0, 0), 7, cv.LINE_AA)
             elif is_horizontal(line):
                 horizontal_lines.append(line)
+                # cv.line(cimg, (x1, y1), (x2, y2), (255, 0, 0), 7, cv.LINE_AA)
 
+    correct = True
     # Group together lines that are almost identical to each other
     horizontal_line_clusters = group(horizontal_lines)
     vertical_line_clusters = group(vertical_lines)
+
+    print(len(horizontal_line_clusters))
+    print(len(vertical_line_clusters))
 
     # Drop clusters with too small size
     horizontal_line_clusters = filter_clusters(horizontal_line_clusters, min_size=4)
     vertical_line_clusters = filter_clusters(vertical_line_clusters, min_size=4)
 
     # Merge lines in a cluster into one long line, that should be the edges of the table in the document
-    correct = True
-    for cluster in horizontal_line_clusters:
-        print('x', len(cluster))
-    for cluster in vertical_line_clusters:
-        print('y', len(cluster))
+    # for cluster in horizontal_line_clusters:
+    #     print('x', len(cluster))
+    # for cluster in vertical_line_clusters:
+    #     print('y', len(cluster))
     h_lines, v_lines = merge_lines(horizontal_line_clusters, vertical_line_clusters)
-    print(v_lines)
-    print(h_lines)
-    for line in v_lines:
-        (x1, y1), (x2, y2) = line
-        cv.line(img, (x1, y1), (x2, y2), (0, 255, 255), 10, cv.LINE_AA)
-    for line in h_lines:
-        (x1, y1), (x2, y2) = line
-        cv.line(img, (x1, y1), (x2, y2), (0, 255, 255), 10, cv.LINE_AA)
+    # print(v_lines)
+    # print(h_lines)
+    # for line in v_lines:
+    #     (x1, y1), (x2, y2) = line
+    #     cv.line(img, (x1, y1), (x2, y2), (0, 255, 255), 10, cv.LINE_AA)
+    # for line in h_lines:
+    #     (x1, y1), (x2, y2) = line
+    #     cv.line(img, (x1, y1), (x2, y2), (0, 255, 255), 10, cv.LINE_AA)
 
     intersections = compute_intersections(v_lines, h_lines)
 
+    # for i in range(len(intersections)):
+    #     img = cv2.circle(cimg, center=intersection, radius=50, color=(255, 0, 0), thickness=-1)
+    #     cv.line(img, intersections[i], intersections[i+1], (0, 255, 255), 10, cv.LINE_AA)
+
+    # cv.line(img, intersections[3], intersections[0], (0, 255, 255), 10, cv.LINE_AA)
     # Group corners into 4 quadrants accroding to middle point
     top_left_quad, bottom_left_quad, top_right_quad, bottom_right_quad = group_into_quadrants(intersections)
 
@@ -186,6 +196,12 @@ def process(in_path):
     bottom_left_point = min(bottom_left_quad, key=lambda p: abs(p[0] - M_X) + abs(p[1] - M_Y))
     bottom_right_point = min(bottom_right_quad, key=lambda p: abs(p[0] - M_X) + abs(p[1] - M_Y))
 
+    # Draw lines for figure for report
+    # cv.line(cimg, top_left_point, top_right_point, (0, 255, 255), 10, cv.LINE_AA)
+    # cv.line(cimg, top_left_point, bottom_left_point, (0, 255, 255), 10, cv.LINE_AA)
+    # cv.line(cimg, bottom_right_point, bottom_left_point, (0, 255, 255), 10, cv.LINE_AA)
+    # cv.line(cimg, bottom_right_point, top_right_point, (0, 255, 255), 10, cv.LINE_AA)
+
     # (deprecated) Automatically evaluate these 4 points, they should somewhat form a rectangle
     # filter_dist = 70
     # if not near(top_left_point[0], bottom_left_point[0], filter_dist) or \
@@ -194,7 +210,7 @@ def process(in_path):
     #         not near(bottom_right_point[1], bottom_left_point[1], filter_dist):
     #     correct = False
 
-    # Circle these points
+    # # Circle these points
     # img = cv2.circle(img, center=top_left_point, radius=10, color=(0, 0, 255), thickness=-1)
     # img = cv2.circle(img, center=top_right_point, radius=10, color=(0, 0, 255), thickness=-1)
     # img = cv2.circle(img, center=bottom_left_point, radius=10, color=(0, 0, 255), thickness=-1)
@@ -212,11 +228,11 @@ def process(in_path):
     cv.rectangle(img, NAME2_RECT_BASE_1, NAME2_RECT_BASE_2, (0, 0, 255), thickness=6)
     cv.rectangle(img, DOB2_RECT_BASE_1, DOB2_RECT_BASE_2, (0, 0, 255), thickness=6)
 
-    return img, correct
+    return img, cimg, correct
 
 
 def process_and_save(in_img, out_img):
-    img, correct = process("img/{}".format(in_img))
+    img, cimg, correct = process("img/{}".format(in_img))
     if correct:
         cv.imwrite('out/correct/{}'.format(out_img), img)
     else:
@@ -224,7 +240,7 @@ def process_and_save(in_img, out_img):
 
 
 def process_and_save_all():
-    executor = ThreadPoolExecutor(max_workers=6)
+    executor = ThreadPoolExecutor(max_workers=8)
     futures = []
     for i in range(200):
         futures.append(executor.submit(process_and_save, '{}.jpg'.format(i + 1), '{}.jpg'.format(i + 1)))
@@ -233,12 +249,12 @@ def process_and_save_all():
     
 
 def process_and_show(in_path):
-    img, correct = process(in_path)
+    img, cimg, correct = process(in_path)
 
     plt.figure()
     plt.imshow(img)
     plt.show()
 
 
-# process_and_save_all()
-process_and_show("img/179.jpg")
+process_and_save_all()
+# process_and_show("img/1.jpg")
